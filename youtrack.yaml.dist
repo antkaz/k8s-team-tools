@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: youtrack
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    app: youtrack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: youtrack
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      name: youtrack
+      labels:
+        app: youtrack
+    spec:
+      containers:
+        - name: youtrack
+          image: jetbrains/youtrack:${K8S_YT_VERSION}
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: "0.5"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "1.5Gi"
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - mountPath: /opt/youtrack/data
+              name: yt-data
+            - mountPath: /opt/youtrack/logs
+              name: yt-logs
+            - mountPath: /opt/youtrack/conf
+              name: yt-conf
+            - mountPath: /opt/youtrack/backups
+              name: yt-backups
+      restartPolicy: Always
+      volumes:
+        - name: yt-data
+          hostPath:
+            path: ${K8S_YT_MOUNT_PATH}/data
+            type: Directory
+        - name: yt-logs
+          hostPath:
+            path: ${K8S_YT_MOUNT_PATH}/logs
+            type: Directory
+        - name: yt-conf
+          hostPath:
+            path: ${K8S_YT_MOUNT_PATH}/conf
+            type: Directory
+        - name: yt-backups
+          hostPath:
+            path: ${K8S_YT_MOUNT_PATH}/backups
+            type: Directory
+
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: youtrack
+  namespace: ${K8S_NAMESPACE}
+spec:
+  selector:
+    app: youtrack
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: youtrack
+  namespace: ${K8S_NAMESPACE}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  rules:
+    - host: ${K8S_YT_HOSTNAME}
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: youtrack
+              servicePort: 80
+  tls:
+    - hosts:
+        - ${K8S_YT_HOSTNAME}
