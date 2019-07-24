@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hub
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    app: hub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hub
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      name: hub
+      labels:
+        app: hub
+    spec:
+      containers:
+        - name: hub
+          image: jetbrains/hub:${K8S_HUB_VERSION}
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: "0.5"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "1.5Gi"
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - mountPath: /opt/hub/data
+              name: hub-data
+            - mountPath: /opt/hub/logs
+              name: hub-logs
+            - mountPath: /opt/hub/conf
+              name: hub-conf
+            - mountPath: /opt/hub/backups
+              name: hub-backups
+      restartPolicy: Always
+      volumes:
+        - name: hub-data
+          hostPath:
+            path: ${K8S_HUB_MOUNT_PATH}/data
+            type: Directory
+        - name: hub-logs
+          hostPath:
+            path: ${K8S_HUB_MOUNT_PATH}/logs
+            type: Directory
+        - name: hub-conf
+          hostPath:
+            path: ${K8S_HUB_MOUNT_PATH}/conf
+            type: Directory
+        - name: hub-backups
+          hostPath:
+            path: ${K8S_HUB_MOUNT_PATH}/backups
+            type: Directory
+
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: hub
+  namespace: ${K8S_NAMESPACE}
+spec:
+  selector:
+    app: hub
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: hub
+  namespace: ${K8S_NAMESPACE}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  rules:
+    - host: ${K8S_HUB_HOSTNAME}
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: hub
+              servicePort: 80
+  tls:
+    - hosts:
+        - ${K8S_HUB_HOSTNAME}
